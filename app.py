@@ -15,13 +15,48 @@ import json
 st.set_page_config(page_title="Organizational Network Analysis Dashboard", layout="wide")
 
 class Employee:
-    def __init__(self, id: int, name: str, department: str, role: str, tenure: int, performance: float):
+    def __init__(self, id: int, name: str, department: str, role: str, tenure: int, performance: float, 
+                 engagement_score: float = None, communication_frequency: float = None, 
+                 collaboration_index: float = None, satisfaction_score: float = None):
         self.id = id
         self.name = name
         self.department = department
         self.role = role
         self.tenure = tenure
         self.performance = performance
+        
+        # Employee Engagement Metrics
+        self.engagement_score = engagement_score or random.uniform(0.3, 1.0)  # Overall engagement (0-1)
+        self.communication_frequency = communication_frequency or random.uniform(0.2, 1.0)  # Communication activity (0-1)
+        self.collaboration_index = collaboration_index or random.uniform(0.1, 1.0)  # Team collaboration (0-1)
+        self.satisfaction_score = satisfaction_score or random.uniform(0.4, 1.0)  # Job satisfaction (0-1)
+        
+        # Derived engagement metrics
+        self.burnout_risk = self._calculate_burnout_risk()
+        self.influence_potential = self._calculate_influence_potential()
+        self.retention_likelihood = self._calculate_retention_likelihood()
+    
+    def _calculate_burnout_risk(self) -> float:
+        """Calculate burnout risk based on engagement factors"""
+        # Higher performance with lower satisfaction/engagement indicates potential burnout
+        stress_factor = max(0, self.performance - self.satisfaction_score)
+        low_engagement_factor = max(0, 0.7 - self.engagement_score)
+        return min(1.0, stress_factor + low_engagement_factor)
+    
+    def _calculate_influence_potential(self) -> float:
+        """Calculate potential for organizational influence"""
+        return (self.engagement_score * 0.4 + 
+                self.communication_frequency * 0.3 + 
+                self.collaboration_index * 0.2 + 
+                self.performance * 0.1)
+    
+    def _calculate_retention_likelihood(self) -> float:
+        """Calculate likelihood of employee retention"""
+        return (self.satisfaction_score * 0.35 + 
+                self.engagement_score * 0.25 + 
+                (self.tenure / 10) * 0.15 +  # Tenure factor (normalized)
+                self.collaboration_index * 0.15 + 
+                self.performance * 0.1)
 
 class ONASimulator:
     def __init__(self, n_employees: int = 50):
@@ -42,7 +77,51 @@ class ONASimulator:
             tenure = random.randint(1, 10)
             performance = random.uniform(0.6, 1.0)
             
-            self.employees.append(Employee(i, name, dept, role, tenure, performance))
+            # Generate engagement metrics with realistic correlations
+            engagement_score = self._generate_correlated_engagement(performance, tenure)
+            communication_freq = self._generate_communication_frequency(role, dept)
+            collaboration_idx = self._generate_collaboration_index(role, performance)
+            satisfaction = self._generate_satisfaction(performance, tenure, engagement_score)
+            
+            self.employees.append(Employee(i, name, dept, role, tenure, performance,
+                                         engagement_score, communication_freq, 
+                                         collaboration_idx, satisfaction))
+    
+    def _generate_correlated_engagement(self, performance: float, tenure: int) -> float:
+        """Generate engagement score with realistic correlations"""
+        # Higher performance generally correlates with higher engagement
+        # But very long tenure might reduce engagement (stagnation)
+        base_engagement = performance * 0.7 + random.uniform(0.1, 0.3)
+        tenure_factor = 1.0 if tenure < 7 else max(0.7, 1.0 - (tenure - 7) * 0.05)
+        return min(1.0, base_engagement * tenure_factor)
+    
+    def _generate_communication_frequency(self, role: str, department: str) -> float:
+        """Generate communication frequency based on role and department"""
+        base_freq = random.uniform(0.3, 0.8)
+        if 'Manager' in role or 'Executive' in role:
+            base_freq += 0.2
+        if department in ['Sales', 'Marketing', 'HR']:
+            base_freq += 0.1
+        return min(1.0, base_freq)
+    
+    def _generate_collaboration_index(self, role: str, performance: float) -> float:
+        """Generate collaboration index based on role and performance"""
+        base_collab = random.uniform(0.2, 0.7)
+        if 'Senior' in role:
+            base_collab += 0.15
+        # High performers often collaborate more
+        if performance > 0.8:
+            base_collab += 0.1
+        return min(1.0, base_collab)
+    
+    def _generate_satisfaction(self, performance: float, tenure: int, engagement: float) -> float:
+        """Generate satisfaction score with realistic correlations"""
+        # Satisfaction correlates with performance and engagement
+        # But decreases with very long tenure (career stagnation)
+        base_satisfaction = (performance * 0.4 + engagement * 0.4 + random.uniform(0.1, 0.2))
+        if tenure > 8:
+            base_satisfaction *= 0.9  # Slight decrease for long tenure
+        return min(1.0, base_satisfaction)
     
     def reset_network(self):
         self.G = nx.Graph()
@@ -55,6 +134,13 @@ class ONASimulator:
             self.G.nodes[i]['role'] = emp.role
             self.G.nodes[i]['tenure'] = emp.tenure
             self.G.nodes[i]['performance'] = emp.performance
+            self.G.nodes[i]['engagement_score'] = emp.engagement_score
+            self.G.nodes[i]['communication_frequency'] = emp.communication_frequency
+            self.G.nodes[i]['collaboration_index'] = emp.collaboration_index
+            self.G.nodes[i]['satisfaction_score'] = emp.satisfaction_score
+            self.G.nodes[i]['burnout_risk'] = emp.burnout_risk
+            self.G.nodes[i]['influence_potential'] = emp.influence_potential
+            self.G.nodes[i]['retention_likelihood'] = emp.retention_likelihood
         
         self.time_steps = []
         self.networks = []
@@ -81,6 +167,19 @@ class ONASimulator:
         # Tenure similarity
         tenure_diff = abs(self.employees[i].tenure - self.employees[j].tenure)
         logit += params['tenure_similarity'] * np.exp(-tenure_diff / 3)
+        
+        # Engagement-based connection factors
+        if 'engagement_similarity' in params:
+            engagement_diff = abs(self.employees[i].engagement_score - self.employees[j].engagement_score)
+            logit += params['engagement_similarity'] * (1 - engagement_diff)
+        
+        if 'collaboration_boost' in params:
+            collab_factor = (self.employees[i].collaboration_index + self.employees[j].collaboration_index) / 2
+            logit += params['collaboration_boost'] * collab_factor
+        
+        if 'communication_affinity' in params:
+            comm_factor = (self.employees[i].communication_frequency + self.employees[j].communication_frequency) / 2
+            logit += params['communication_affinity'] * comm_factor
         
         # Triangle closure
         common_neighbors = len(list(nx.common_neighbors(self.G, i, j)))
@@ -119,8 +218,72 @@ class ONASimulator:
         self.networks.append(self.G.copy())
         self.time_steps.append(len(self.time_steps))
 
+def calculate_engagement_metrics(employees: List[Employee], G: nx.Graph = None) -> Dict:
+    """Calculate comprehensive employee engagement metrics"""
+    engagement_metrics = {}
+    
+    # Overall engagement statistics
+    engagement_scores = [emp.engagement_score for emp in employees]
+    engagement_metrics['overall_engagement'] = {
+        'mean': np.mean(engagement_scores),
+        'std': np.std(engagement_scores),
+        'min': np.min(engagement_scores),
+        'max': np.max(engagement_scores),
+        'quartiles': np.percentile(engagement_scores, [25, 50, 75])
+    }
+    
+    # Engagement by department
+    dept_engagement = {}
+    departments = set(emp.department for emp in employees)
+    for dept in departments:
+        dept_employees = [emp for emp in employees if emp.department == dept]
+        dept_scores = [emp.engagement_score for emp in dept_employees]
+        dept_engagement[dept] = {
+            'mean_engagement': np.mean(dept_scores),
+            'employees_count': len(dept_employees),
+            'high_engagement_count': len([s for s in dept_scores if s > 0.8]),
+            'low_engagement_count': len([s for s in dept_scores if s < 0.5])
+        }
+    
+    engagement_metrics['department_engagement'] = dept_engagement
+    
+    # Risk analysis
+    high_burnout_risk = [emp for emp in employees if emp.burnout_risk > 0.7]
+    low_retention_risk = [emp for emp in employees if emp.retention_likelihood < 0.5]
+    high_influence_potential = [emp for emp in employees if emp.influence_potential > 0.8]
+    
+    engagement_metrics['risk_analysis'] = {
+        'high_burnout_risk': len(high_burnout_risk),
+        'low_retention_risk': len(low_retention_risk),
+        'high_influence_potential': len(high_influence_potential),
+        'burnout_risk_employees': [(emp.name, emp.department, emp.burnout_risk) for emp in high_burnout_risk],
+        'retention_risk_employees': [(emp.name, emp.department, emp.retention_likelihood) for emp in low_retention_risk],
+        'high_influence_employees': [(emp.name, emp.department, emp.influence_potential) for emp in high_influence_potential]
+    }
+    
+    # Engagement-Network correlation (if network provided)
+    if G is not None and G.number_of_edges() > 0:
+        engagement_network_corr = {}
+        degrees = dict(G.degree())
+        
+        # Calculate correlations between engagement metrics and network position
+        degree_values = [degrees.get(i, 0) for i in range(len(employees))]
+        engagement_values = [emp.engagement_score for emp in employees]
+        collaboration_values = [emp.collaboration_index for emp in employees]
+        
+        if len(set(degree_values)) > 1:  # Avoid correlation with constant values
+            engagement_network_corr['engagement_degree_correlation'] = np.corrcoef(engagement_values, degree_values)[0, 1]
+            engagement_network_corr['collaboration_degree_correlation'] = np.corrcoef(collaboration_values, degree_values)[0, 1]
+        else:
+            engagement_network_corr['engagement_degree_correlation'] = 0
+            engagement_network_corr['collaboration_degree_correlation'] = 0
+        
+        engagement_metrics['network_correlation'] = engagement_network_corr
+    
+    return engagement_metrics
+
 def calculate_ona_metrics(G: nx.Graph, employees: List[Employee]) -> Dict:
-    """Calculate key ONA metrics"""
+    """Calculate key ONA metrics including engagement analysis"""
     metrics = {}
     
     # Centrality measures
@@ -157,11 +320,15 @@ def calculate_ona_metrics(G: nx.Graph, employees: List[Employee]) -> Dict:
         'largest_component_size': len(max(nx.connected_components(G), key=len)) if G.number_of_edges() > 0 else 0
     }
     
+    # Add engagement metrics
+    metrics['engagement_metrics'] = calculate_engagement_metrics(employees, G)
+    
     return metrics
 
 def create_ona_network_plot(G: nx.Graph, employees: List[Employee], color_by: str = 'department', 
                            layout_type: str = 'spring', selected_nodes: List[int] = None,
-                           filter_department: str = None, filter_role: str = None):
+                           filter_department: str = None, filter_role: str = None, 
+                           engagement_filter: str = None):
     """Create interactive ONA network visualization"""
     if G.number_of_edges() == 0:
         # Handle empty network
@@ -186,6 +353,15 @@ def create_ona_network_plot(G: nx.Graph, employees: List[Employee], color_by: st
         filtered_nodes = [n for n in filtered_nodes if employees[n].department == filter_department]
     if filter_role:
         filtered_nodes = [n for n in filtered_nodes if filter_role.lower() in employees[n].role.lower()]
+    if engagement_filter:
+        if engagement_filter == 'High Engagement':
+            filtered_nodes = [n for n in filtered_nodes if employees[n].engagement_score > 0.8]
+        elif engagement_filter == 'Low Engagement':
+            filtered_nodes = [n for n in filtered_nodes if employees[n].engagement_score < 0.5]
+        elif engagement_filter == 'Burnout Risk':
+            filtered_nodes = [n for n in filtered_nodes if employees[n].burnout_risk > 0.7]
+        elif engagement_filter == 'High Influence':
+            filtered_nodes = [n for n in filtered_nodes if employees[n].influence_potential > 0.8]
     
     # Create subgraph with filtered nodes
     G_filtered = G.subgraph(filtered_nodes)
@@ -267,35 +443,60 @@ def create_ona_network_plot(G: nx.Graph, employees: List[Employee], color_by: st
         emp = employees[node]
         degree = G_filtered.degree(node)
         
-        # Enhanced node information
+        # Enhanced node information with engagement metrics
         node_info.append(
             f"<b>{emp.name}</b><br>"
             f"Department: {emp.department}<br>"
             f"Role: {emp.role}<br>"
             f"Tenure: {emp.tenure} years<br>"
             f"Performance: {emp.performance:.2f}<br>"
+            f"Engagement: {emp.engagement_score:.2f}<br>"
+            f"Satisfaction: {emp.satisfaction_score:.2f}<br>"
+            f"Burnout Risk: {emp.burnout_risk:.2f}<br>"
+            f"Retention: {emp.retention_likelihood:.2f}<br>"
             f"Connections: {degree}<br>"
             f"<i>Click to select/deselect</i>"
         )
         
-        # Color coding
+        # Color coding with engagement options
         if color_by == 'department':
             node_colors.append(dept_color_map[emp.department])
         elif color_by == 'performance':
             node_colors.append(emp.performance)
         elif color_by == 'tenure':
             node_colors.append(emp.tenure)
+        elif color_by == 'engagement':
+            node_colors.append(emp.engagement_score)
+        elif color_by == 'satisfaction':
+            node_colors.append(emp.satisfaction_score)
+        elif color_by == 'burnout_risk':
+            node_colors.append(emp.burnout_risk)
+        elif color_by == 'influence_potential':
+            node_colors.append(emp.influence_potential)
+        elif color_by == 'retention_likelihood':
+            node_colors.append(emp.retention_likelihood)
         else:
             node_colors.append(degree)
         
-        # Size based on degree centrality
-        node_sizes.append(max(10, min(25, 8 + degree * 2)))
+        # Size based on degree centrality and engagement
+        base_size = max(10, min(25, 8 + degree * 2))
+        # Boost size for high engagement employees
+        if emp.engagement_score > 0.8:
+            base_size += 3
+        # Reduce size for burnout risk employees
+        if emp.burnout_risk > 0.7:
+            base_size = max(8, base_size - 2)
+        node_sizes.append(base_size)
         
-        # Symbol based on role
+        # Symbol based on role and engagement status
         if 'Manager' in emp.role or 'Executive' in emp.role:
             node_symbols.append('diamond')
         elif 'Senior' in emp.role:
             node_symbols.append('square')
+        elif emp.burnout_risk > 0.7:
+            node_symbols.append('triangle-up')  # Warning symbol for burnout risk
+        elif emp.influence_potential > 0.8:
+            node_symbols.append('star')  # Star for high influence
         else:
             node_symbols.append('circle')
     
@@ -662,7 +863,8 @@ def main():
         
         with col1:
             color_by = st.selectbox("Color nodes by:", 
-                                  ["department", "performance", "tenure", "connections"])
+                                  ["department", "performance", "tenure", "connections", 
+                                   "engagement", "satisfaction", "burnout_risk", "influence_potential", "retention_likelihood"])
         
         with col2:
             layout_type = st.selectbox("Layout algorithm:", 
@@ -677,6 +879,9 @@ def main():
                     'hierarchy': 0.5,
                     'performance_similarity': 0.3,
                     'tenure_similarity': 0.2,
+                    'engagement_similarity': 0.3,
+                    'collaboration_boost': 0.4,
+                    'communication_affinity': 0.2,
                     'triangles': 0.4,
                     'preferential_attachment': 0.3,
                     'dissolution': 0.05
@@ -688,7 +893,7 @@ def main():
         
         # Filtering controls
         st.subheader("🔍 Filters")
-        col1, col2, col3 = st.columns(3)
+        col1, col2, col3, col4 = st.columns(4)
         
         with col1:
             departments = list(set(emp.department for emp in simulator.employees))
@@ -707,6 +912,14 @@ def main():
                 filter_role = None
         
         with col3:
+            engagement_filter = st.selectbox("Filter by engagement:",
+                                           ["All", "High Engagement", "Low Engagement", 
+                                            "Burnout Risk", "High Influence"],
+                                           index=0)
+            if engagement_filter == "All":
+                engagement_filter = None
+        
+        with col4:
             # Search functionality
             search_term = st.text_input("Search employees:", 
                                       placeholder="Enter name or keyword...")
@@ -755,7 +968,8 @@ def main():
             layout_type=layout_type,
             selected_nodes=matching_employees,
             filter_department=filter_department,
-            filter_role=filter_role
+            filter_role=filter_role,
+            engagement_filter=engagement_filter
         )
         st.plotly_chart(fig, use_container_width=True)
         
@@ -932,6 +1146,150 @@ def main():
         if density > 0.1 and clustering > 0.3 and components < 3:
             st.success("**Healthy Network:** Good balance of connections and collaboration patterns.")
     
+    elif page == "Employee Engagement":
+        st.header("📊 Employee Engagement Analysis")
+        
+        engagement_metrics = metrics.get('engagement_metrics', {})
+        
+        if engagement_metrics:
+            # Key engagement metrics
+            st.subheader("📊 Key Engagement Metrics")
+            col1, col2, col3, col4 = st.columns(4)
+            
+            overall_engagement = engagement_metrics.get('overall_engagement', {})
+            risk_analysis = engagement_metrics.get('risk_analysis', {})
+            
+            with col1:
+                mean_engagement = overall_engagement.get('mean', 0)
+                st.metric("Average Engagement", f"{mean_engagement:.2f}")
+            
+            with col2:
+                high_burnout = risk_analysis.get('high_burnout_risk', 0)
+                st.metric("High Burnout Risk", high_burnout)
+            
+            with col3:
+                low_retention = risk_analysis.get('low_retention_risk', 0)
+                st.metric("Retention Risk", low_retention)
+            
+            with col4:
+                high_influence = risk_analysis.get('high_influence_potential', 0)
+                st.metric("High Influence Potential", high_influence)
+            
+            # Engagement visualizations
+            fig_dist, fig_dept_box, fig_perf_eng, fig_risk, dept_df, risk_df = create_engagement_dashboard(simulator.employees, metrics)
+            
+            # Display charts
+            col1, col2 = st.columns(2)
+            with col1:
+                st.plotly_chart(fig_dist, use_container_width=True)
+                st.plotly_chart(fig_perf_eng, use_container_width=True)
+            
+            with col2:
+                st.plotly_chart(fig_dept_box, use_container_width=True)
+                st.plotly_chart(fig_risk, use_container_width=True)
+            
+            # Risk analysis tables
+            st.subheader("⚠️ Risk Analysis")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.write("**High Burnout Risk Employees:**")
+                burnout_employees = risk_analysis.get('burnout_risk_employees', [])
+                if burnout_employees:
+                    burnout_df = pd.DataFrame(burnout_employees, columns=['Employee', 'Department', 'Burnout Risk'])
+                    st.dataframe(burnout_df)
+                else:
+                    st.info("No employees at high burnout risk.")
+            
+            with col2:
+                st.write("**Retention Risk Employees:**")
+                retention_employees = risk_analysis.get('retention_risk_employees', [])
+                if retention_employees:
+                    retention_df = pd.DataFrame(retention_employees, columns=['Employee', 'Department', 'Retention Likelihood'])
+                    st.dataframe(retention_df)
+                else:
+                    st.info("No employees at retention risk.")
+            
+            # Department engagement breakdown
+            st.subheader("🏢 Department Engagement Analysis")
+            dept_engagement = engagement_metrics.get('department_engagement', {})
+            
+            if dept_engagement:
+                dept_summary = []
+                for dept, data in dept_engagement.items():
+                    dept_summary.append({
+                        'Department': dept,
+                        'Mean Engagement': f"{data['mean_engagement']:.2f}",
+                        'Total Employees': data['employees_count'],
+                        'High Engagement': data['high_engagement_count'],
+                        'Low Engagement': data['low_engagement_count']
+                    })
+                
+                dept_summary_df = pd.DataFrame(dept_summary)
+                st.dataframe(dept_summary_df, use_container_width=True)
+        
+        else:
+            st.info("Generate a network first to see engagement analysis.")
+    
+    elif page == "Influence Analysis":
+        st.header("⭐ Organizational Influence Analysis")
+        
+        if current_network.number_of_edges() > 0:
+            fig_influence, influence_df = create_influence_network_analysis(current_network, simulator.employees)
+            
+            if fig_influence is not None:
+                st.plotly_chart(fig_influence, use_container_width=True)
+                
+                # Influence metrics explanation
+                st.subheader("📈 Understanding Influence Scores")
+                st.markdown("""
+                **Influence Score Calculation:**
+                - 40% Network Centrality (connections and position)
+                - 30% Employee Engagement Level
+                - 30% Calculated Influence Potential
+                
+                **Key Insights:**
+                - High influence employees can drive organizational change
+                - Consider these employees for leadership development
+                - Monitor engagement levels of top influencers
+                """)
+                
+                # Detailed influence table
+                st.subheader("📅 Detailed Influence Analysis")
+                st.dataframe(influence_df, use_container_width=True)
+                
+                # Network correlation insights
+                engagement_metrics = metrics.get('engagement_metrics', {})
+                network_corr = engagement_metrics.get('network_correlation', {})
+                
+                if network_corr:
+                    st.subheader("🔗 Network-Engagement Correlations")
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        eng_corr = network_corr.get('engagement_degree_correlation', 0)
+                        st.metric("Engagement-Network Correlation", f"{eng_corr:.3f}")
+                        if eng_corr > 0.3:
+                            st.success("Strong positive correlation: Engaged employees are well-connected")
+                        elif eng_corr < -0.3:
+                            st.warning("Negative correlation: Engaged employees may be isolated")
+                        else:
+                            st.info("Weak correlation between engagement and network position")
+                    
+                    with col2:
+                        collab_corr = network_corr.get('collaboration_degree_correlation', 0)
+                        st.metric("Collaboration-Network Correlation", f"{collab_corr:.3f}")
+                        if collab_corr > 0.3:
+                            st.success("Strong positive correlation: Collaborative employees are well-connected")
+                        elif collab_corr < -0.3:
+                            st.warning("Negative correlation: Collaborative employees may be isolated")
+                        else:
+                            st.info("Weak correlation between collaboration and network position")
+        
+        else:
+            st.info("Generate a network first to see influence analysis.")
+    
     elif page == "Simulation":
         st.header("🔬 Interactive Network Simulation")
         
@@ -943,6 +1301,15 @@ def main():
         hierarchy_param = st.sidebar.slider("Hierarchy Effect", 0.0, 2.0, 0.5, 0.1)
         performance_param = st.sidebar.slider("Performance Similarity", 0.0, 1.0, 0.3, 0.1)
         tenure_param = st.sidebar.slider("Tenure Similarity", 0.0, 1.0, 0.2, 0.1)
+        
+        # Engagement-based parameters
+        st.sidebar.subheader("Engagement Parameters")
+        engagement_param = st.sidebar.slider("Engagement Similarity", 0.0, 1.0, 0.3, 0.1)
+        collaboration_param = st.sidebar.slider("Collaboration Boost", 0.0, 1.0, 0.4, 0.1)
+        communication_param = st.sidebar.slider("Communication Affinity", 0.0, 1.0, 0.2, 0.1)
+        
+        # Network structure parameters
+        st.sidebar.subheader("Network Structure")
         triangle_param = st.sidebar.slider("Triangle Closure", 0.0, 2.0, 0.4, 0.1)
         preferential_param = st.sidebar.slider("Preferential Attachment", 0.0, 2.0, 0.3, 0.1)
         dissolution_param = st.sidebar.slider("Connection Dissolution", 0.0, 0.2, 0.05, 0.01)
@@ -958,6 +1325,9 @@ def main():
             'hierarchy': hierarchy_param,
             'performance_similarity': performance_param,
             'tenure_similarity': tenure_param,
+            'engagement_similarity': engagement_param,
+            'collaboration_boost': collaboration_param,
+            'communication_affinity': communication_param,
             'triangles': triangle_param,
             'preferential_attachment': preferential_param,
             'dissolution': dissolution_param
@@ -1070,6 +1440,9 @@ def main():
                     'hierarchy': 0.8,
                     'performance_similarity': 0.4,
                     'tenure_similarity': 0.3,
+                    'engagement_similarity': 0.5,
+                    'collaboration_boost': 0.6,
+                    'communication_affinity': 0.3,
                     'triangles': 0.6,
                     'preferential_attachment': 0.4,
                     'dissolution': 0.03
@@ -1088,7 +1461,8 @@ def main():
                                     key="sim_layout")
         with col2:
             sim_color_by = st.selectbox("Color Nodes By:", 
-                                      ["department", "performance", "tenure", "connections"],
+                                      ["department", "performance", "tenure", "connections",
+                                       "engagement", "satisfaction", "burnout_risk", "influence_potential"],
                                       key="sim_color")
         
         # Current network state
