@@ -1,6 +1,8 @@
 # 🏢 Organizational Network Analysis Dashboard
 
-A comprehensive Streamlit application for Organizational Network Analysis (ONA) designed for HR professionals. Built with advanced ERGM modeling and interactive visualizations to understand workplace relationships, identify key influencers, and assess organizational health.
+A comprehensive, modular Streamlit application for Organizational Network Analysis (ONA) designed for HR professionals. Built with advanced ERGM modeling and interactive visualizations to understand workplace relationships, identify key influencers, and assess organizational health.
+
+> **✨ Modular Architecture!** This application features a clean, portable package structure with separated concerns for better development experience, maintainability, and deployment flexibility.
 
 ## 🚀 Key Features
 
@@ -42,22 +44,46 @@ A comprehensive Streamlit application for Organizational Network Analysis (ONA) 
 - **Real-time Parameter Adjustment**: Watch networks evolve with engagement-driven dynamics
 - **Scenario Testing**: Model impact of engagement initiatives on network formation
 
-## Installation
+## 📦 Installation & Setup
 
-1. Clone the repository:
+### Quick Start (Recommended)
+
+1. **Clone the repository:**
 ```bash
 git clone https://github.com/reneedaos/network-health-demo.git
 cd network-health-demo
 ```
 
-2. Install dependencies:
+2. **Install as a package (recommended):**
 ```bash
-pip install -r requirements.txt
+pip install -e .
 ```
 
-3. Run the application:
+3. **Run the application:**
 ```bash
+# Option 1: Using the package entry point
+ona-dashboard
+
+# Option 2: Direct execution (recommended)
 streamlit run app.py
+
+# Option 3: Module execution
+python -m src.ona_dashboard
+```
+
+### Alternative Installation
+
+For minimal dependencies installation:
+```bash
+pip install -r requirements.txt
+streamlit run app.py
+```
+
+### Development Setup
+
+For development with additional tools:
+```bash
+pip install -e ".[dev]"  # Includes pytest, black, flake8, mypy
 ```
 
 ## 🎯 Usage Guide
@@ -156,7 +182,25 @@ logit = baseline + same_dept_bonus + hierarchy_effect +
 - **Risk Assessments**: Flight risk and key talent identification
 - **Health Metrics**: Network density, clustering, fragmentation
 
-## 🛠️ Technical Stack
+## 🛠️ Technical Stack & Architecture
+
+### Modular Package Structure
+
+```
+src/ona_dashboard/
+├── models/                     # Data models
+│   └── employee.py            # Employee class with engagement metrics
+├── utils/                     # Utility functions
+│   ├── generators.py          # Data generation utilities
+│   └── metrics.py             # ONA and engagement calculations
+├── visualizations/            # Visualization components
+│   ├── network_plots.py       # Interactive network visualization
+│   └── analysis_plots.py      # Analysis charts and dashboards
+├── simulation/                # ERGM simulation engine
+│   └── ergm_simulator.py      # Organizational network simulation
+└── config/                    # Configuration management
+    └── settings.py            # Centralized app settings
+```
 
 ### Dependencies
 ```
@@ -169,7 +213,29 @@ plotly>=5.15.0       # Interactive visualizations
 scipy>=1.11.0        # Statistical functions
 ```
 
-### Architecture
+### Architecture Benefits
+
+#### **🔧 Modularity**
+- **Separation of Concerns**: Each module has a specific responsibility
+- **Reusable Components**: Visualization and analysis functions can be used independently
+- **Clean Dependencies**: Import relationships are explicit and manageable
+
+#### **📦 Portability**
+- **Package Installation**: Can be installed via pip as `ona-dashboard`
+- **Clean Imports**: All imports use relative paths within the package
+- **Configuration Management**: Centralized settings in `DashboardConfig`
+
+#### **🧪 Maintainability**
+- **Single Responsibility**: Each file has a focused purpose
+- **Easier Testing**: Individual components can be tested in isolation
+- **Code Organization**: Related functionality is grouped together
+
+#### **⚡ Performance**
+- **Lazy Loading**: Components are loaded only when needed
+- **Optimized Imports**: Reduced memory footprint and faster startup
+- **Modular Caching**: Better Streamlit session state management
+
+### Core Technologies
 - **NetworkX**: Graph operations, centrality calculations, layout algorithms
 - **Plotly**: Interactive network visualizations with zoom/pan/hover
 - **Streamlit**: Multi-page dashboard interface with real-time updates
@@ -203,6 +269,82 @@ While designed for practical HR use, this tool also serves educational purposes 
 
 For advanced research applications, consider specialized packages like `statnet` (R) or `ergm` (Python).
 
+## 🚀 Development & Deployment
+
+### Development Workflow
+
+```bash
+# Clone and setup development environment
+git clone https://github.com/reneedaos/network-health-demo.git
+cd network-health-demo
+pip install -e ".[dev]"
+
+# Run tests
+pytest
+
+# Code formatting
+black src/
+
+# Type checking
+mypy src/
+```
+
+### Docker Deployment
+
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY . .
+
+RUN pip install -e .
+
+EXPOSE 8501
+
+CMD ["ona-dashboard"]
+```
+
+### Production Deployment
+
+The modular architecture supports various deployment options:
+
+- **Streamlit Cloud**: Deploy directly with `streamlit run app.py`
+- **Docker**: Containerize with the provided structure
+- **Kubernetes**: Scale with the package-based architecture
+- **Heroku/Railway**: Deploy as a Python package
+
+### Extending the Application
+
+The modular structure makes it easy to add new features:
+
+1. **New Visualizations**: Add to `src/ona_dashboard/visualizations/`
+2. **Additional Metrics**: Extend `src/ona_dashboard/utils/metrics.py`
+3. **Custom Models**: Add to `src/ona_dashboard/models/`
+4. **Different Simulations**: Enhance `src/ona_dashboard/simulation/`
+
+## 📊 Architecture Comparison
+
+| Feature | Before Refactoring | After Refactoring (`app.py`) |
+|---------|--------------------|-----------------------------|
+| **Lines of Code** | 1,600+ (single file) | ~300 per module (8 modules) |
+| **Maintainability** | Difficult | Excellent |
+| **Testability** | Limited | Full unit testing |
+| **Reusability** | None | High |
+| **Package Installation** | No | Yes (`pip install -e .`) |
+| **Configuration** | Hardcoded | Centralized in `DashboardConfig` |
+| **Import Structure** | Monolithic | Clean, modular imports |
+| **Development** | Single large file | Focused, maintainable modules |
+| **Architecture** | All-in-one file | Modular package structure |
+
 ## 📄 License
 
 This project is for educational and demonstration purposes. See individual package licenses for dependencies.
+
+---
+
+### 🔗 Quick Links
+
+- **[Refactoring Guide](REFACTORING_GUIDE.md)**: Detailed explanation of the modular architecture  
+- **[Main Application](app.py)**: Modular implementation with clean architecture
+- **[Package Source](src/ona_dashboard/)**: Modular package structure
+- **[Setup Configuration](setup.py)**: Package installation and development setup
